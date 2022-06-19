@@ -87,11 +87,12 @@ func imapftl#Imapftl_GetMapping(trigger, class)
   let stopidx = colnum - 2 - maxMacroNameLen
   while leaderIdx >= stopidx
       \ && index(g:{a:class}#leaders, line[leaderIdx]) < 0
-      if line[leaderIdx] =~ '\s'
-	" No whitespace characters allowed in macro names/tokens, so return 
-	" immediately if we encounter one.
+    for non_macro_char in g:{a:class}#non_macro_char_l
+      " Don't try a mapping if we encounter a disallowed character (pattern).
+      if line[leaderIdx] =~ non_macro_char
 	return nr2char(a:trigger)
       endif
+    endfor
     let leaderIdx -= 1
   endwhile
   " No leader char found.
