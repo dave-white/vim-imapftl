@@ -5,7 +5,7 @@
 func s:ExpansionLookup(class, trigger, leader, token)
   let expansion = ''
   " Choose dictionary based on leader and trigger
-  let dict = g:{a:class}#dict_{char2nr(a:leader)}_{a:trigger}
+  let dict = g:{a:class}#dict_{a:leader}_{a:trigger}
 
   " User-typed token matches a macro name (dict key) exactly, so return 
   " corresponding expansion text immediately.
@@ -23,24 +23,11 @@ func s:ExpansionLookup(class, trigger, leader, token)
     endif
   endfor
 
-  " Found no macro name matching user-typed token, so return blank string.
-  if empty(macroMatchList)
-    if a:trigger == 13 " <cr>
-      return "\\begin{".a:token."}\n<++>\n\\end{".a:token."}"
-    elseif a:trigger == 9 " <tab>
-      return "\\".a:token."{<++>}<++>"
-    " elseif a:trigger == 32 " <space>
-    "   return "\\begin{".a:token."}\n<++>\n\\end{".a:token."}"
-    else
-      return expansion
-    endif
-  endif
-
   if len(macroMatchList) == 1
     " Unique macro key matching token, so just grab that one's 
     " corresponding expansion text.
     let expansion = dict[macroMatchList[0]]
-  else " Ask user which macro they want.
+  elseif len(macroMatchList) > 1 " Ask user which macro they want.
     call sort(macroMatchList)
     let selMacroList = ['Select macro:']
     for selection in macroMatchList
@@ -69,6 +56,36 @@ func s:AddMovement(text, startLn)
   endif
 endfunc
 " }}}
+" s:GetToken: {{{
+func s:GetToken(class)
+  " Set current pos, parameters.
+  let line = getline(".")
+  let colnum = col(".")
+  let maxMacroNameLen = 14 " currently comes from "subsubsection"
+
+  " Search backward for a leader character.
+  let leader_idx = colnum - 2
+  let stopidx = colnum - 2 - maxMacroNameLen
+  while leader_idx >= stopidx
+      \ && index(g:{a:class}#leaders, line[leader_idx]) < 0
+    for non_macro_char in g:{a:class}#non_macro_char_l
+      " Don't try a mapping if we encounter a disallowed character (pattern).
+      if line[leader_idx] =~ non_macro_char
+	return ["", ""]
+      endif
+    endfor
+    let leader_idx -= 1
+  endwhile
+  " No leader char found.
+  if leader_idx < stopidx
+    return ["", ""]
+  endif
+
+  " Get user-typed token: text between last leader char and pos of cursor at 
+  " which trigger was inserted, inclusive.
+  return [line[leader_idx], slice(line, leader_idx + 1, colnum - 1)]
+endfunc
+" }}}
 " Imapftl_GetMapping: {{{
 " Description: to be written {{{
 " args:
@@ -76,34 +93,10 @@ endfunc
 " 	below.
 " }}}
 func imapftl#Imapftl_GetMapping(trigger, class)
-  " Set current pos, parameters.
-  let line = getline(".")
   let linenum = line(".")
-  let colnum = col(".")
-  let leaderIdx = colnum - 2
-  let maxMacroNameLen = 14 " currently comes from "subsubsection"
-
-  " Search backward for a leader character.
-  let stopidx = colnum - 2 - maxMacroNameLen
-  while leaderIdx >= stopidx
-      \ && index(g:{a:class}#leaders, line[leaderIdx]) < 0
-    for non_macro_char in g:{a:class}#non_macro_char_l
-      " Don't try a mapping if we encounter a disallowed character (pattern).
-      if line[leaderIdx] =~ non_macro_char
-	return nr2char(a:trigger)
-      endif
-    endfor
-    let leaderIdx -= 1
-  endwhile
-  " No leader char found.
-  if leaderIdx < stopidx
-    return nr2char(a:trigger)
-  endif
-
-  " Get user-typed token: text between last leader char and pos of cursor 
-  " at which trigger was inserted.
-  let leader = line[leaderIdx]
-  let token = slice(line, leaderIdx + 1, colnum - 1)
+  let leader_token = s:GetToken(a:class)
+  let leader = char2nr(leader_token[0])
+  let token = leader_token[1]
   " Abort if token is empty.
   if empty(token)
     return nr2char(a:trigger)
@@ -119,6 +112,23 @@ func imapftl#Imapftl_GetMapping(trigger, class)
   endif
 
   " Add enough backspaces to overwrite the token and then an undo mark.
+  let printText = repeat("\<bs>", strcharlen(token) + 1)
+	\ . "\<c-g>u"
+	\ . "\<c-v>"
+	\ . expansion
+
+  return s:AddMovement(printText, linenum)
+endfunc
+" }}}
+" imapftl#Imapftl_GetGenericMapping: {{{
+func imapftl#Imapftl_GetGenericMapping(trigger, class)
+  let linenum = line(".")
+  let leader_token = s:GetToken(a:class)
+  let leader = char2nr(leader_token[0])
+  let token = leader_token[1]
+  let expansion =
+      \ substitute(g:{a:class}#generic_mapping_{leader}_{a:trigger},
+      \ "<token>", token, "g")
   let printText = repeat("\<bs>", strcharlen(token) + 1)
 	\ . "\<c-g>u"
 	\ . "\<c-v>"
