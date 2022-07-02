@@ -1,140 +1,128 @@
-" s:ExpansionLookup: {{{
+" s:lookup_macro: {{{
 " Description: {{{ Look up expansion text corresponding to the user-typed 
 " token, or to a macro name matching it, in selected dictionary above.
 " }}}
-func s:ExpansionLookup(class, trigger, leader, token)
-  let expansion = ''
+function s:lookup_macro(class, trigger, leader, token)
+  let l:macro = ''
   " Choose dictionary based on leader and trigger
-  let dict = g:{a:class}#dict_{a:leader}_{a:trigger}
+  let l:dict = g:imapftl#{a:class}#dict_{a:leader}_{a:trigger}
 
-  " User-typed token matches a macro name (dict key) exactly, so return 
-  " corresponding expansion text immediately.
-  if has_key(dict, a:token)
-    let expansion = dict[a:token]
-    return expansion
+  " User-typed token matches a macro name (l:dict key) exactly, so return 
+  " corresponding l:macro text immediately.
+  if has_key(l:dict, a:token)
+    let l:macro = l:dict[a:token]
+    return l:macro
   endif
 
   " User-typed token does not match a macro name exactly, so build a list 
   " of those it pattern-matches.
-  let macroMatchList = []
-  for macro in keys(dict)
-    if macro =~ '\C^'.a:token.'\w*$'
-      let macroMatchList = add(macroMatchList, macro)
+  let l:matches = []
+  for l:key in keys(l:dict)
+    if l:key =~ '\C^'.a:token.'\w*$'
+      let l:matches = add(l:matches, l:key)
     endif
   endfor
 
-  if len(macroMatchList) == 1
+  if len(l:matches) == 1
     " Unique macro key matching token, so just grab that one's 
-    " corresponding expansion text.
-    let expansion = dict[macroMatchList[0]]
-  elseif len(macroMatchList) > 1 " Ask user which macro they want.
-    call sort(macroMatchList)
-    let selMacroList = ['Select macro:']
-    for selection in macroMatchList
-      call add(selMacroList,
-	    \ index(macroMatchList, selection) + 1
+    " corresponding l:macro text.
+    let l:macro = l:dict[l:matches[0]]
+  elseif len(l:matches) > 1 " Ask user which macro they want.
+    call sort(l:matches)
+    let l:sel_prompt_list = ['Select macro:']
+    for selection in l:matches
+      call add(l:sel_prompt_list,
+	    \ index(l:matches, selection) + 1
 	    \ . '. ' . selection)
     endfor
-    let selMacro = macroMatchList[
-	  \ inputlist(selMacroList) - 1 ]
-    let expansion = dict[selMacro]
+    let selMacro = l:matches[
+	  \ inputlist(l:sel_prompt_list) - 1 ]
+    let l:macro = l:dict[selMacro]
   endif
 
-  return expansion
-endfunc
+  return l:macro
+endfunction
 " }}}
-" s:AddMovement: {{{
-" Description: Move to and delete first placeholder.
-func s:AddMovement(text, startLn)
-  let firstPhIdx = stridx(a:text, "<++>")
-  if firstPhIdx >= 0
-    return  a:text . "\<c-o>:call cursor(".a:startLn.", 1) | "
-	  \ . "call search(\"<++>\")\<cr>"
-	  \ . repeat("\<Del>", 4)
-  else
-    return a:text
-  endif
-endfunc
-" }}}
-" s:GetToken: {{{
-func s:GetToken(class)
+" s:get_token: {{{
+function s:get_token(class)
   " Set current pos, parameters.
-  let line = getline(".")
-  let colnum = col(".")
-  let maxMacroNameLen = 14 " currently comes from "subsubsection"
+  let l:line = getline(".")
+  let l:start_idx = col(".") - 1
+  let l:max_token_len = 14 " currently comes from "subsubsection"
 
   " Search backward for a leader character.
-  let leader_idx = colnum - 2
-  let stopidx = colnum - 2 - maxMacroNameLen
-  while leader_idx >= stopidx
-      \ && index(g:{a:class}#leaders, line[leader_idx]) < 0
-    for non_macro_char in g:{a:class}#non_macro_char_l
-      " Don't try a mapping if we encounter a disallowed character (pattern).
-      if line[leader_idx] =~ non_macro_char
-	return ["", ""]
-      endif
-    endfor
-    let leader_idx -= 1
+  let l:leader_idx = l:start_idx - 1
+  let l:stop_idx = max([l:start_idx - l:max_token_len, -1])
+  while l:leader_idx > l:stop_idx
+    if index(g:imapftl#{a:class}#macro_token_excl, l:line[l:leader_idx]) >= 0
+      return [0, v:null]
+    elseif index(g:imapftl#{a:class}#leaders,
+	\ char2nr(l:line[l:leader_idx])) >= 0
+      return [ char2nr(l:line[l:leader_idx]),
+	  \ slice(l:line, l:leader_idx + 1, l:start_idx) ]
+    endif
+    let l:leader_idx -= 1
   endwhile
   " No leader char found.
-  if leader_idx < stopidx
-    return ["", ""]
-  endif
-
-  " Get user-typed token: text between last leader char and pos of cursor at 
-  " which trigger was inserted, inclusive.
-  return [line[leader_idx], slice(line, leader_idx + 1, colnum - 1)]
-endfunc
+  return [0, v:null]
+endfunction
 " }}}
-" Imapftl_GetMapping: {{{
+" imapftl#get_macro: {{{
 " Description: to be written {{{
 " args:
 " 	trigger = char code of the keystroke imapped to trigger this lookup 
 " 	below.
 " }}}
-func imapftl#Imapftl_GetMapping(trigger, class)
-  let linenum = line(".")
-  let leader_token = s:GetToken(a:class)
-  let leader = char2nr(leader_token[0])
-  let token = leader_token[1]
+function imapftl#get_macro(trigger, class = &ft)
+  let l:leader_token = s:get_token(a:class)
+  if l:leader_token[0]
+    let l:leader = l:leader_token[0]
+    let l:token = l:leader_token[1]
+  else
+    return nr2char(a:trigger)
+  endif
   " Abort if token is empty.
-  if empty(token)
+  if empty(l:token)
     return nr2char(a:trigger)
   endif
 
   " Look up expansion text corresponding to the user-typed token, or to a 
   " macro name matching it, in selected dictionary above.
-  let expansion = s:ExpansionLookup(a:class, a:trigger, leader, token)
-
+  let l:macro = s:lookup_macro(a:class, a:trigger, l:leader, l:token)
   " Don't paste in a blank; just return the trigger.
-  if empty(expansion)
+  if empty(l:macro)
     return nr2char(a:trigger)
   endif
 
-  " Add enough backspaces to overwrite the token and then an undo mark.
-  let printText = repeat("\<bs>", strcharlen(token) + 1)
-	\ . "\<c-g>u"
-	\ . "\<c-v>"
-	\ . expansion
-
-  return s:AddMovement(printText, linenum)
-endfunc
+  " Overwrite leader + token
+  exe "normal! \<bs>v ".repeat("\<bs>", strcharlen(l:token))."d"
+  return l:macro
+  " return a:trigger == 32 ? " " : ""
+  " if match(l:macro, g:imapftl#{a:class}#ph) >= 0
+  "   call imapftl#jump2ph(a:class)
+  " endif
+endfunction
 " }}}
-" imapftl#Imapftl_GetGenericMapping: {{{
-func imapftl#Imapftl_GetGenericMapping(trigger, class)
-  let linenum = line(".")
-  let leader_token = s:GetToken(a:class)
-  let leader = char2nr(leader_token[0])
-  let token = leader_token[1]
-  let expansion =
-      \ substitute(g:{a:class}#generic_mapping_{leader}_{a:trigger},
-      \ "<token>", token, "g")
-  let printText = repeat("\<bs>", strcharlen(token) + 1)
-	\ . "\<c-g>u"
-	\ . "\<c-v>"
-	\ . expansion
-
-  return s:AddMovement(printText, linenum)
-endfunc
+" imapftl#get_generic_macro: {{{
+function imapftl#get_generic_macro(trigger, class = &ft)
+  let l:leader_token = s:get_token(a:class)
+  let l:leader = char2nr(l:leader_token[0])
+  let l:token = l:leader_token[1]
+  let l:macro = substitute(
+      \ g:imapftl#{a:class}#generic_mapping_{l:leader}_{a:trigger},
+      \ "%N", l:token, "g" )
+  " Overwrite l:leader + l:token
+  exe "normal v ".repeat("h", strcharlen(l:token) + 2)." s ".l:macro
+  if match(l:macro, g:imapftl#{a:class}#ph) >= 0
+    call imapftl#jump2ph(a:class)
+  endif
+endfunction
 " }}}
+
+function imapftl#jump2ph(class = &ft, dir = 1)
+  let l:search_char = a:dir == 1 ? "/" : "?"
+  exe "normal ".l:search_char.g:imapftl#{a:class}#ph.l:search_char."\<CR>"
+      \." \| normal v gn \<c-g>"
+endfunction
+
 " vim:ft=vim:fdm=marker
