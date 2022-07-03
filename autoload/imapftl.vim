@@ -6,40 +6,48 @@ function s:get_token(class)
   let l:max_token_len = 14 " currently comes from "subsubsection"
 
   " Search backward for a leader character.
-  let l:leader_idx = l:start_idx
+  let l:idx = l:start_idx
   let l:stop_idx = max([l:start_idx - l:max_token_len, -1])
-  while l:leader_idx > l:stop_idx
-    if index(g:imapftl#{a:class}#macro_token_excl, l:line[l:leader_idx]) >= 0
+  while l:idx > l:stop_idx
+    let l:char_at_idx = l:line[l:idx]
+    if l:char_at_idx =~ g:imapftl#{a:class}#macro_token_excl_pat
       return [0, v:null]
-    elseif index(g:imapftl#{a:class}#leaders,
-	\ char2nr(l:line[l:leader_idx])) >= 0
-      return [ char2nr(l:line[l:leader_idx]),
-	  \ slice(l:line, l:leader_idx + 1, l:start_idx) ]
+    elseif l:char_at_idx =~ g:imapftl#{a:class}#leader_pat
+      return [ char2nr(l:char_at_idx),
+	  \ slice(l:line, l:idx + 1, l:start_idx) ]
     endif
-    let l:leader_idx -= 1
+    let l:idx -= 1
   endwhile
   " No leader char found.
   return [0, v:null]
 endfunction
 " }}}
+
+func imapftl#print_ph_jump(str) " {{{
+  let l:printout = "x\<C-\>\<C-N>m'\"_s".a:str
+  if match(a:str, "<++>") >= 0
+    let l:printout .= "<++>\<c-\>\<c-n>`' | :call imapftl#jump2ph(\"vitex\")\<cr>"
+  endif
+  return l:printout
+endfunc
+" }}}
+
 " imapftl#get_macro: {{{
 " Description: to be written {{{
 " args:
 " 	trigger = char code of the keystroke imapped to trigger this lookup 
 " 	below.
 " }}}
-function imapftl#get_macro(trigger, class = &ft)
+func imapftl#get_macro(trigger, class = &ft)
   let l:leader_token = s:get_token(a:class)
   if l:leader_token[0]
     let l:leader = l:leader_token[0]
     let l:token = l:leader_token[1]
   else
-    exe "normal! a".nr2char(a:trigger) | return
     return nr2char(a:trigger)
   endif
   " Abort if token is empty.
   if empty(l:token)
-    exe "normal! a".nr2char(a:trigger) | return
     return nr2char(a:trigger)
   endif
 
@@ -48,23 +56,15 @@ function imapftl#get_macro(trigger, class = &ft)
   let l:macro = imapftl#{a:class}#get_macro(l:token, a:trigger, l:leader)
   " Don't paste in a blank; just return the trigger.
   if empty(l:macro)
-    exe "normal! a".nr2char(a:trigger) | return
     return nr2char(a:trigger)
   endif
 
   " Overwrite leader + token
   " exe "normal! \<bs>v ".repeat("\<bs>", strcharlen(l:token))."d"
-  exe "normal! i".repeat("\<bs>", strcharlen(l:token) + 1)
-  normal! m'
-  call confirm(l:macro, 'x')
-  exe "normal! i".l:macro
-  if match(l:macro, "<++>") >= 0
-    normal `'
-  endif
-  normal a
-  return
-  " return repeat("\<bs>", strcharlen(l:token) + 1).l:macro
-endfunction
+  return "\<c-g>u"
+      \.repeat("\<bs>", strcharlen(l:token) + 1)
+      \.imapftl#print_ph_jump(l:macro)
+endfunc
 " }}}
 " imapftl#get_generic_macro: {{{
 function imapftl#get_generic_macro(trigger, class = &ft)
@@ -83,9 +83,11 @@ endfunction
 " }}}
 
 function imapftl#jump2ph(class = &ft, dir = 1)
-  let l:search_char = a:dir == 1 ? "/" : "?"
-  exe "normal ".l:search_char.g:imapftl#{a:class}#ph.l:search_char."\<CR>"
-      \." \| normal v gn \<c-g>"
+  let l:search_char = a:dir > 0 ? '/' : '?'
+  exe "normal!".l:search_char.g:imapftl#{a:class}#ph."\<cr>vgn\<c-g>"
+  return
+  " call search(g:imapftl#{a:class}#ph, l:flags)
+  " exe "normal! v gn \<c-g>"
 endfunction
 
 " vim:ft=vim:fdm=marker
