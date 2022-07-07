@@ -2,7 +2,7 @@
 function s:get_token(class)
   " Set current pos, parameters.
   let l:line = getline(".")
-  let l:start_idx = col(".") - 1
+  let l:start_idx = col(".") - 2
   let l:max_token_len = 14 " currently comes from "subsubsection"
 
   " Search backward for a leader character.
@@ -14,7 +14,7 @@ function s:get_token(class)
       return [0, v:null]
     elseif l:char_at_idx =~ g:imapftl#{a:class}#leader_pat
       return [ char2nr(l:char_at_idx),
-	  \ slice(l:line, l:idx + 1, l:start_idx) ]
+	  \ slice(l:line, l:idx + 1, l:start_idx + 1) ]
     endif
     let l:idx -= 1
   endwhile
