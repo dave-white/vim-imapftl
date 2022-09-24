@@ -23,15 +23,6 @@ function s:get_token(class)
 endfunction
 " }}}
 
-func imapftl#print_ph_jump(str) " {{{
-  let l:printout = "x\<C-\>\<C-N>m'\"_s".a:str
-  if match(a:str, "<++>") >= 0
-    let l:printout .= "<++>\<c-\>\<c-n>`' | :call imapftl#jump2ph(\"vitex\")\<cr>"
-  endif
-  return l:printout
-endfunc
-" }}}
-
 " imapftl#get_macro: {{{
 " Description: to be written {{{
 " args:
@@ -82,12 +73,22 @@ function imapftl#get_generic_macro(trigger, class = &ft)
 endfunction
 " }}}
 
+func imapftl#print_ph_jump(str) " {{{
+  let l:printout = "x\<C-\>\<C-N>m'\"_s".a:str
+  if match(a:str, "<++>") >= 0
+    let l:printout .= "<++>\<c-\>\<c-n>`'\<bs>"
+	\."| :call imapftl#jump2ph(\"vitex\")\<cr>"
+  endif
+  return l:printout
+endfunc
+" }}}
+
 function imapftl#jump2ph(class = &ft, dir = 1)
   let l:search_char = a:dir > 0 ? '/' : '?'
+  " call search(g:imapftl#{a:class}#ph, 'z')
+  " exe "normal!vgn\<c-g>"
   exe "normal!".l:search_char.g:imapftl#{a:class}#ph."\<cr>vgn\<c-g>"
   return
-  " call search(g:imapftl#{a:class}#ph, l:flags)
-  " exe "normal! v gn \<c-g>"
 endfunction
 
 " vim:ft=vim:fdm=marker
