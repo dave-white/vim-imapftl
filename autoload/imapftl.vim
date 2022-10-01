@@ -14,7 +14,7 @@ function s:get_token(class)
       return [0, v:null]
     elseif l:char_at_idx =~ g:imapftl#{a:class}#leader_pat
       return [ char2nr(l:char_at_idx),
-	  \ slice(l:line, l:idx + 1, l:start_idx + 1) ]
+	  \ strcharpart(l:line, l:idx + 1, l:start_idx - l:idx) ]
     endif
     let l:idx -= 1
   endwhile
@@ -51,9 +51,9 @@ func imapftl#get_macro(trigger, class = &ft)
   endif
 
   " Overwrite leader + token
-  " exe "normal! \<bs>v ".repeat("\<bs>", strcharlen(l:token))."d"
+  " exe "normal! \<bs>v ".repeat("\<bs>", strchars(l:token))."d"
   return "\<c-g>u"
-      \.repeat("\<bs>", strcharlen(l:token) + 1)
+      \.repeat("\<bs>", strchars(l:token) + 1)
       \.imapftl#print_ph_jump(l:macro)
 endfunc
 " }}}
@@ -66,7 +66,7 @@ function imapftl#get_generic_macro(trigger, class = &ft)
       \ g:imapftl#{a:class}#generic_mapping_{l:leader}_{a:trigger},
       \ "%N", l:token, "g" )
   " Overwrite l:leader + l:token
-  exe "normal v ".repeat("h", strcharlen(l:token) + 2)." s ".l:macro
+  exe "normal v ".repeat("h", strchars(l:token) + 2)." s ".l:macro
   if match(l:macro, g:imapftl#{a:class}#ph) >= 0
     call imapftl#jump2ph(a:class)
   endif
